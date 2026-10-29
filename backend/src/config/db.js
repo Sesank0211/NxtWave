@@ -1,55 +1,51 @@
-"use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
-Object.defineProperty(exports, "__esModule", { value: true });
-exports.isDbConnected = exports.connectDB = void 0;
-const mongoose_1 = __importDefault(require("mongoose"));
-/**
- * Connect to MongoDB database using Mongoose.
- * Reads connection URI from environment variables without hardcoded credentials.
- */
-const connectDB = async () => {
-    const uri = process.env.MONGODB_URI;
-    if (!uri) {
-        console.error('[Database Error] MONGODB_URI environment variable is not defined.');
-        return;
-    }
-    try {
-        const conn = await mongoose_1.default.connect(uri);
-        console.log(`[Database] MongoDB connected successfully: ${conn.connection.host}`);
-        // Backfill any existing students missing a referralCode
-        try {
-            const StudentModel = mongoose_1.default.models.Student || mongoose_1.default.model('Student');
-            const unassigned = await StudentModel.find({
-                $or: [{ referralCode: { $exists: false } }, { referralCode: null }, { referralCode: '' }]
-            });
-            for (const s of unassigned) {
-                s.referralCode = `SZ${Math.floor(1000 + Math.random() * 9000)}`;
-                await s.save();
-            }
-        }
-        catch {
-            // Model might not yet be registered or empty, safe to proceed
-        }
-    }
-    catch (error) {
-        console.error('[Database Error] Failed to connect to MongoDB:', error);
-        // Log error cleanly without exiting the process to allow server health checks to report status
-    }
-};
-exports.connectDB = connectDB;
-/**
- * Helper to check whether database is currently connected (readyState === 1).
- */
-const isDbConnected = () => {
-    return mongoose_1.default.connection.readyState === 1;
-};
-exports.isDbConnected = isDbConnected;
-// Monitor ongoing connection events
-mongoose_1.default.connection.on('disconnected', () => {
-    console.warn('[Database] MongoDB connection disconnected.');
-});
-mongoose_1.default.connection.on('error', (err) => {
-    console.error('[Database Error] MongoDB connection error:', err);
-});
+const fs = require('fs');
+const path = require('path');
+const { DatabaseSync } = require('node:sqlite');
+
+const databasePath = process.env.SQLITE_PATH || path.resolve(__dirname, '../../data/projectzero.sqlite');
+fs.mkdirSync(path.dirname(databasePath), { recursive: true });
+
+const database = new DatabaseSync(databasePath);
+database.exec('PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;');
+database.exec(`
+  CREATE TABLE IF NOT EXISTS students (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL COLLATE NOCASE UNIQUE,
+    collegeName TEXT NOT NULL,
+    graduationYear TEXT NOT NULL,
+    referralCode TEXT NOT NULL COLLATE NOCASE UNIQUE,
+    referredBy TEXT,
+    registeredAt TEXT NOT NULL,
+    createdAt TEXT NOT NULL,
+    updatedAt TEXT NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_students_referredBy ON students(referredBy);
+  CREATE INDEX IF NOT EXISTS idx_students_registeredAt ON students(registeredAt);
+  CREATE INDEX IF NOT EXISTS idx_students_graduationYear ON students(graduationYear);
+`);
+
+let connected = true;
+
+function isDbConnected() {
+  try {
+    database.prepare('SELECT 1').get();
+    return connected;
+  } catch {
+    return false;
+  }
+}
+
+async function connectDB() {
+  database.prepare('SELECT 1').get();
+  connected = true;
+  console.log(`[Database] SQLite ready: ${databasePath}`);
+}
+
+function closeDB() {
+  if (!connected) return;
+  database.close();
+  connected = false;
+}
+
+module.exports = { database, connectDB, isDbConnected, closeDB, databasePath };
