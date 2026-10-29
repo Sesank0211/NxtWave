@@ -11,7 +11,9 @@ const { errorHandler } = require('./middleware/errorHandler');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
+// Render/browser origins are serialized without a trailing slash. Normalize
+// the configured value so a pasted frontend URL still matches the CORS origin.
+const CLIENT_ORIGIN = (process.env.CLIENT_ORIGIN || 'http://localhost:5173').replace(/\/+$/, '');
 
 app.use(helmet());
 app.use(cors({

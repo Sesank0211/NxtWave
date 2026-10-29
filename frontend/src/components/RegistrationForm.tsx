@@ -173,7 +173,7 @@ export const RegistrationForm: React.FC<RegistrationFormProps> = ({ onSuccess })
         // Handle backend unavailable error
         if (result.isNetworkError) {
           setIsNetworkUnavailable(true);
-          setGeneralError('Backend server is currently unavailable. Please check that the API service is running on port 5000.');
+          setGeneralError('Registration service is temporarily unavailable. Please try again shortly.');
         } else {
           setGeneralError(result.message || 'Registration failed. Please check your inputs.');
           // Map backend field errors if provided
